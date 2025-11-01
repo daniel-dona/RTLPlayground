@@ -58,7 +58,8 @@ $(BUILDDIR)rtlplayground.img: $(BUILDDIR)rtlplayground.ihx
 
 $(BUILDDIR)rtlplayground.bin: $(BUILDDIR)rtlplayground.img
 	if [ -e $@ ]; then rm $@; fi
-	echo "0000000: 00 40" | xxd -r - $@
+#	echo "0000000: 00 40" | xxd -r - $@ ## For direct EEPROM programming
+	echo "0000000: 00 00" | xxd -r - $@
 	cat $< >> $@
 	truncate --size=16K $@
 	dd if=$< skip=80 bs=1024 >>$@
