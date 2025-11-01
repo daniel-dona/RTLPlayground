@@ -2,7 +2,7 @@ var txG = new BigInt64Array(10);
 var txB = new BigInt64Array(10);
 var rxG = new BigInt64Array(10);
 var rxB = new BigInt64Array(10);
-const linkS = ["Disabled", "No Link", "100M", "1000M", "NO", "NO", "2.5G"];
+const linkS = ["Disabled", "No Link", "100M", "1000M", "NO", "10G", "2.5G"];
 var pState = new Int8Array(10);
 var pIsSFP = new Int8Array(10);
 var numPorts = 0;
@@ -56,5 +56,5 @@ function update() {
 
 window.addEventListener("load", function() {
   update();
-  const interval = setInterval(update, 2000);
+  const interval = setInterval(update, 30000);
 });

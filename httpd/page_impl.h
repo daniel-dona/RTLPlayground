@@ -7,5 +7,6 @@ void send_vlan(register uint16_t vlan);
 void send_basic_info(void);
 void send_eee(void);
 void send_mirror(void);
+void send_gpio(void);
 
 #endif

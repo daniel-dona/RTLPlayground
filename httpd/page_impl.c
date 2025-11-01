@@ -369,3 +369,66 @@ void send_status(void)
 			char_to_html(']');
 	}
 }
+
+void send_gpio(void)
+{
+	slen = strtox(outbuf, HTTP_RESPONCE_JSON);
+	print_string("sending gpio\n");
+	char_to_html('[');
+
+	for (uint8_t i = minPort; i <= maxPort; i++) {
+		slen += strtox(outbuf + slen, "{\"portNum\":");
+		if (!isRTL8373)
+			itoa_html(log_to_phys_port[i]);
+		else
+			itoa_html(i + 1);
+
+		if (IS_SFP(i)) {
+		  slen += strtox(outbuf + slen, ",\"isSFP\":1,\"enabled\":");
+			bool_to_html(!((sfp_pins_last >> (i == maxPort ? 0 : 4)) & 1));
+
+			slen += strtox(outbuf + slen, ",\"link\":");
+			uint8_t rate = sfp_read_reg(i == maxPort ? 0 : 1, 12);
+			if (rate == 0xd)
+				char_to_html('2'); // 1000BX
+			else if (rate == 0x1f)
+				char_to_html('5'); // 2G5
+			else if (rate > 0x65 && rate < 0x70)
+				char_to_html('4'); // 10G "4" is not a valid value for port LINK speed
+			else
+				char_to_html('1'); // 100M ???
+		} else {
+		  slen += strtox(outbuf + slen, ",\"isSFP\":0,\"enabled\":");
+			phy_read(i, 0x1f, 0xa610);
+			bool_to_html(SFR_DATA_8 == 0x20);
+
+			slen += strtox(outbuf + slen, ",\"link\":");
+			reg_read_m(RTL837X_REG_LINKS);
+			uint8_t b = sfr_data[3 - (i >> 1)];
+			b = (i & 1) ? b >> 4 : b & 0xf;
+			char_to_html('0' + b);
+		}
+		STAT_GET(STAT_COUNTER_TX_PKTS, i);
+		slen += strtox(outbuf + slen, ",\"txG\":\"0x");
+		reg_to_html(RTL837X_STAT_V_HIGH);
+		reg_to_html(RTL837X_STAT_V_LOW);
+
+		slen += strtox(outbuf + slen, "\",\"txB\":\"0x");
+		STAT_GET(STAT_COUNTER_ERR_PKTS, i);
+		reg_to_html(RTL837X_STAT_V_LOW);	// 32 bit Tx Packet errors
+
+		slen += strtox(outbuf + slen, "\",\"rxG\":\"0x");
+		STAT_GET(STAT_COUNTER_RX_PKTS, i);
+		reg_to_html(RTL837X_STAT_V_HIGH);
+		reg_to_html(RTL837X_STAT_V_LOW);
+
+		slen += strtox(outbuf + slen, "\",\"rxB\":\"0x");
+		STAT_GET(STAT_COUNTER_ERR_PKTS, i);
+		reg_to_html(RTL837X_STAT_V_HIGH);	// 32bit RX packet errors
+		slen += strtox(outbuf + slen, "\"}");
+		if (i < maxPort)
+			char_to_html(',');
+		else
+			char_to_html(']');
+	}
+}
