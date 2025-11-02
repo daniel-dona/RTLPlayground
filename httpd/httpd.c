@@ -212,8 +212,8 @@ uint8_t stream_upload(uint16_t bptr)
 	__xdata uint8_t *p = uip_appdata;
 	__xdata struct httpd_state * __xdata s = &(uip_conn->appstate);
 
-	print_string("Stream_upload called: ");
-	print_short(bptr); write_char('\n');
+	//print_string("Stream_upload called: ");
+	//print_short(bptr); write_char('\n');
 
 	do {
 		if (bptr >= uip_len) {
@@ -223,20 +223,21 @@ uint8_t stream_upload(uint16_t bptr)
 		// Have we reached the end of the part?
 		if (!boundary[bindex]) {
 			s->tstate = TSTATE_NONE;
-			print_string("len 2: "); print_short(write_len); write_char(' ');
+			//print_string("len 2: "); print_short(write_len); write_char(' ');
 			flash_region.addr = uptr;
 			flash_region.len = write_len;
 			flash_write_bytes(flash_buf);
 			uptr += write_len;
 			write_len = 0;
 			// TODO: This is a bit premature, what about a nice web-page saying the device will reset???
-			print_string("CRC16: "); print_short(crc_final); write_char('\n');
+			//print_string("CRC16: "); print_short(crc_final); write_char('\n');
 			if (crc_final == 0xb001) {
 				print_string("Checksum OK.");
 			} else {
 				print_string("Checksum incorrect!");
 			}
 			print_string("Upload to flash done, will reset!\n");
+			delay(1000);
 			reset_chip();
 			if (bptr >= uip_len)
 				return 0;
@@ -257,8 +258,8 @@ uint8_t stream_upload(uint16_t bptr)
 			crc16(p + bptr);
 			flash_buf[write_len++] = p[bptr++];
 			if (write_len >= FLASHMEM_PAGE_SIZE) {
-				print_string("len: "); print_short(write_len); write_char(' ');
-				print_string("CRC16: "); print_short(crc_value); write_char('\n');
+				//print_string("len: "); print_short(write_len); write_char(' ');
+				//print_string("CRC16: "); print_short(crc_value); write_char('\n');
 				flash_region.addr = uptr;
 				flash_region.len = FLASHMEM_PAGE_SIZE;
 				flash_write_bytes(flash_buf);
@@ -353,7 +354,8 @@ void httpd_appcall(void)
 {
 	__xdata struct httpd_state * __xdata s = &(uip_conn->appstate);
 
-	write_char('P');
+	//write_char('P');
+	
 	if(uip_connected() && s->tstate == TSTATE_CLOSED) {
 		print_string("Connected...\n");
 		s->tstate = TSTATE_NONE;
@@ -432,6 +434,8 @@ void httpd_appcall(void)
 			print_string("Not file entry\n");
 			if (!strcmp(q, "/status.json")) {
 				send_status();
+			}else if (!strcmp(q, "/gpio.json")) {
+				send_gpio();
 			} else if (!strcmp(q, "/information.json")) {
 				send_basic_info();
 			} else if (!strcmp(q, "/vlan.json")) {
