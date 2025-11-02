@@ -465,31 +465,45 @@ uint8_t cmd_tokenize(void) __banked
 
 // Print GPIO status
 void print_gpio_status(void) {
-	for (uint8_t idx = 0; idx < 2; idx++) {
-		reg_read(RTL837X_REG_GPIO_00_31_INPUT + (idx * 4));
-		print_string("GPIO ");
-		write_char(idx + '0');
+	for(__xdata uint8_t n = 0; n < 100; n++){
+
+		reg_read_m(RTL837X_REG_GPIO_00_31_INPUT);
+		print_string(" GPIO_00_31");
 		write_char(':');
 		write_char(' ');
 
-		print_byte(SFR_DATA_24);
-		print_byte(SFR_DATA_16);
-		print_byte(SFR_DATA_8);
-		print_byte(SFR_DATA_0);
-
+		print_byte(sfr_data[3]);
 		write_char(' ');
-		print_byte( gpio_last_value[(idx *4)] ^ SFR_DATA_24);
-		gpio_last_value[(idx *4)] = SFR_DATA_24;
-		print_byte( gpio_last_value[(idx *4) + 1] ^ SFR_DATA_16);
-		gpio_last_value[(idx *4) + 1] = SFR_DATA_16;
-		print_byte( gpio_last_value[(idx *4) + 2] ^ SFR_DATA_8);
-		gpio_last_value[(idx *4) + 2] = SFR_DATA_8;
-		print_byte( gpio_last_value[(idx *4) + 3] ^ SFR_DATA_0);
-		gpio_last_value[(idx *4) + 3] = SFR_DATA_0;
+		print_byte(sfr_data[2]);
+		write_char(' ');
+		print_byte(sfr_data[1]);
+		write_char(' ');
+		print_byte(sfr_data[0]);
+
+		reg_read_m(RTL837X_REG_GPIO_32_63_INPUT);
+		print_string(" | GPIO_32_63");
+		write_char(':');
+		write_char(' ');
+
+		print_byte(sfr_data[3]);
+		write_char(' ');
+		print_byte(sfr_data[2]);
+		write_char(' ');
+		print_byte(sfr_data[1]);
+		write_char(' ');
+		print_byte(sfr_data[0]);
+
 		write_char('\n');
+		delay(100);
 	}
+
 }
 
+//// SFPT_STEST
+
+
+
+////
 
 // Identify command
 void cmd_parser(void) __banked
@@ -513,17 +527,92 @@ void cmd_parser(void) __banked
 			print_string("\nRESET\n\n");
 			reset_chip();
 		}
+		
 		if (cmd_compare(0, "sfp")) {
-			uint8_t rate = sfp_read_reg(0, 12);
-			print_string("\nRate: "); print_byte(rate);
-			print_string("  Encoding: "); print_byte(sfp_read_reg(0, 11));
-			print_string("\n");
-			for (uint8_t i = 20; i < 60; i++) {
-				uint8_t c = sfp_read_reg(0, i);
-				if (c)
-					write_char(c);
+			for (__xdata uint8_t port = 0; port < 2; port++) {
+				print_string("\n============================");
+				print_string("\n## SFP "); print_byte(port);
+				print_string(" EEPROM Dump");
+				print_string("\n============================\n");
+
+				// ---- Basic summary from A0 ----
+				__xdata uint8_t id            = sfp_read_reg_page(port, 0, 0);
+				__xdata uint8_t enc           = sfp_read_reg_page(port, 0, 11);
+				__xdata uint8_t rate          = sfp_read_reg_page(port, 0, 12);
+				__xdata uint8_t wavelength_hi = sfp_read_reg_page(port, 0, 60);
+				__xdata uint8_t wavelength_lo = sfp_read_reg_page(port, 0, 61);
+				__xdata uint16_t wavelength   = ((uint16_t)wavelength_hi << 8) | wavelength_lo;
+
+				print_string("Identifier: 0x"); print_byte(id);
+				print_string("  Encoding: ");    print_byte(enc);
+				print_string("  Rate: ");        print_byte(rate);
+				print_string("  Wavelength: ");  print_dec(wavelength);
+				print_string(" nm\n");
+
+				print_string("Vendor: ");
+				for (uint8_t i = 20; i < 36; i++) {
+					__xdata uint8_t c = sfp_read_reg_page(port, 0, i);
+					if (c >= 32 && c <= 126) write_char((char)c);
+				}
+
+				print_string("\nPN: ");
+				for (uint8_t i = 40; i < 56; i++) {
+					__xdata uint8_t c = sfp_read_reg_page(port, 0, i);
+					if (c >= 32 && c <= 126) write_char((char)c);
+				}
+
+				print_string("\nSN: ");
+				for (uint8_t i = 68; i < 84; i++) {
+					__xdata uint8_t c = sfp_read_reg_page(port, 0, i);
+					if (c >= 32 && c <= 126) write_char((char)c);
+				}
+				print_string("\n");
+
+				print_string("\n----------------------------\n");
+				print_string("[Diagnostics Data]\n");
+
+				// ---- Raw data from A2 ----
+				__xdata uint8_t t_hi      = sfp_read_reg_page(port, 1, 96);
+				__xdata uint8_t t_lo      = sfp_read_reg_page(port, 1, 97);
+				__xdata uint8_t v_hi      = sfp_read_reg_page(port, 1, 98);
+				__xdata uint8_t v_lo      = sfp_read_reg_page(port, 1, 99);
+				__xdata uint8_t txbias_hi = sfp_read_reg_page(port, 1, 100);
+				__xdata uint8_t txbias_lo = sfp_read_reg_page(port, 1, 101);
+				__xdata uint8_t txp_hi    = sfp_read_reg_page(port, 1, 102);
+				__xdata uint8_t txp_lo    = sfp_read_reg_page(port, 1, 103);
+				__xdata uint8_t rxp_hi    = sfp_read_reg_page(port, 1, 104);
+				__xdata uint8_t rxp_lo    = sfp_read_reg_page(port, 1, 105);
+
+				__xdata int16_t raw_temp = ((int16_t)t_hi << 8) | t_lo;
+				__xdata uint32_t volt_uV = (((uint16_t)v_hi << 8) | v_lo) * 100UL;     // µV
+				__xdata uint32_t bias_uA = (((uint16_t)txbias_hi << 8) | txbias_lo) * 2UL;  // µA
+				__xdata uint32_t tx_uW   = (((uint16_t)txp_hi << 8) | txp_lo) * 100UL; // µW
+				__xdata uint32_t rx_uW   = (((uint16_t)rxp_hi << 8) | rxp_lo) * 100UL; // µW
+
+				// ---- Print scaled values ----
+				print_string("Temperature: ");
+				print_dec(raw_temp >> 8); write_char('.'); print_dec(((raw_temp & 0xF0) * 100) >> 8);
+				print_string(" °C \n");
+
+				print_string("Voltage: ");
+				print_dec(volt_uV); print_string(" µV\n");
+
+				print_string("TX Bias: ");
+				print_dec(bias_uA); print_string(" µA\n");
+
+				print_string("TX Power: ");
+				print_dec(tx_uW); print_string(" µW\n");
+
+				print_string("RX Power: ");
+				print_dec(rx_uW); print_string(" µW\n");
+
+				print_string("----------------------------\n");
 			}
 		}
+
+
+
+
 		if (cmd_compare(0, "stat")) {
 			port_stats_print();
 		}

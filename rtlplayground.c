@@ -24,7 +24,7 @@ void crc16(__xdata uint8_t *v) __naked;
 #define FIRMWARE_UPLOAD_START 0x100000
 
 #define SYS_TICK_HZ 100
-#define SERIAL_BAUD_RATE 115200
+#define SERIAL_BAUD_RATE 57600
 
 /* All RTL839x switches have an external 25MHz Oscillator,
    VALID RTL8372/3 CPU frequencies found in switches are:
@@ -207,24 +207,22 @@ uint16_t strlen_x(register __xdata const char *s)
 }
 
 
-void print_short(uint16_t a)
-{
+void print_short(__xdata uint16_t a){
 	print_string("0x");
-	for (signed char i = 12; i >= 0; i -= 4) {
+	for (__xdata signed char i = 12; i >= 0; i -= 4) {
 		write_char(hex[(a >> i) & 0xf]);
 	}
 }
 
 
-void print_long(__xdata uint32_t a)
-{
+void print_long(__xdata uint32_t a){
 	print_string("0x");
-	for (signed char i = 28; i >= 0; i -= 4) {
+	for (__xdata signed char i = 28; i >= 0; i -= 4) {
 		write_char(hex[(a >> i) & 0xf]);
 	}
 }
 
-void print_byte(uint8_t a)
+void print_byte(__xdata uint8_t a)
 {
 	write_char(hex[(a >> 4) & 0xf]);
 	write_char(hex[a & 0xf]);
@@ -383,7 +381,7 @@ void reg_bit_clear(uint16_t reg_addr, char bit)
 /*
  * This masks the sfr data fields, first &-ing with ~mask, then setting the bits in set
  */
-void sfr_mask_data(uint8_t n, uint8_t mask, uint8_t set)
+void sfr_mask_data(__xdata uint8_t n, __xdata uint8_t mask, __xdata uint8_t set)
 {
 	uint8_t b = sfr_data[3-n];
 	b &= ~mask;
@@ -721,17 +719,166 @@ void sds_config(uint8_t sds, uint8_t mode)
 /*
  * Read a register of the EEPROM via I2C
  */
-uint8_t sfp_read_reg(uint8_t slot, uint8_t reg)
+
+
+uint8_t sfp_read_reg(__xdata uint8_t slot, __xdata uint8_t reg){
+
+	return sfp_read_reg_page(slot, (uint8_t) 0, reg);
+
+}
+
+
+
+/* --- I2C Master Controller: used in sfp_read_reg() --- */
+
+/* Control Register */
+#define RTL8373_I2C_MST1_CTRL1_ADDR                      (0x418)
+  #define RTL8373_I2C_MST1_CTRL1_DEV_ADDR_OFFSET         (3)
+  #define RTL8373_I2C_MST1_CTRL1_DEV_ADDR_MASK           (0x7F << RTL8373_I2C_MST1_CTRL1_DEV_ADDR_OFFSET)
+  #define RTL8373_I2C_MST1_CTRL1_RWOP_OFFSET             (2)
+  #define RTL8373_I2C_MST1_CTRL1_RWOP_MASK               (0x1 << RTL8373_I2C_MST1_CTRL1_RWOP_OFFSET)
+  #define RTL8373_I2C_MST1_CTRL1_I2C_TRIG_OFFSET         (0)
+  #define RTL8373_I2C_MST1_CTRL1_I2C_TRIG_MASK           (0x1 << RTL8373_I2C_MST1_CTRL1_I2C_TRIG_OFFSET)
+
+/* Memory Address Register */
+#define RTL8373_I2C_MST1_MEMADDR_CTRL_ADDR               (0x420)
+  #define RTL8373_I2C_MST1_MEMADDR_CTRL_MEM_ADDR_OFFSET  (0)
+  #define RTL8373_I2C_MST1_MEMADDR_CTRL_MEM_ADDR_MASK    (0xFFFFFF << RTL8373_I2C_MST1_MEMADDR_CTRL_MEM_ADDR_OFFSET)
+
+/* Data Register (read/write buffer) */
+#define RTL8373_I2C_MST1_DATA_CTRL_ADDR(index)           (0x424 + (((index >> 2) << 2))) /* index: 0-15 */
+  #define RTL8373_I2C_MST1_DATA_CTRL_DATA_OFFSET(index)  ((index & 0x3) << 3)
+  #define RTL8373_I2C_MST1_DATA_CTRL_DATA_MASK(index)    (0xFF << RTL8373_I2C_MST1_DATA_CTRL_DATA_OFFSET(index))
+
+
+void print_dec(__xdata uint32_t value)
 {
+    // Special case for 0
+    if (value == 0) {
+        write_char('0');
+        return;
+    }
+
+    // Divisors for each decimal digit place (powers of 10)
+    __code uint32_t divisors[] = {
+        1000000000UL, 100000000UL, 10000000UL, 1000000UL,
+        100000UL, 10000UL, 1000UL, 100UL, 10UL, 1UL
+    };
+
+    __bit started = 0;   // Flag to skip leading zeros
+    for (__xdata uint8_t i = 0; i < 10; i++) {
+        uint8_t digit = 0;
+        while (value >= divisors[i]) {
+            value -= divisors[i];
+            digit++;
+        }
+        if (digit || started) {
+            write_char('0' + digit);
+            started = 1;
+        }
+    }
+}
+
+
+uint8_t sfp_read_reg_page(__xdata uint8_t slot, __xdata uint8_t page, __xdata uint8_t reg) {
+
+	//__xdata uint8_t upper;
+	//__xdata uint8_t lower;
+	//__xdata uint8_t addr;
+	__xdata uint8_t dev_addr;
+	
+
 	if (slot == 0) {
 		reg_read_m(RTL837X_REG_I2C_CTRL);
 		sfr_mask_data(1, 0xff, 0x72);
-		reg_write_m(RTL837X_REG_I2C_CTRL);
 	} else {
 		reg_read_m(RTL837X_REG_I2C_CTRL);
 		sfr_mask_data(1, 0xff, 0x6e);
-		reg_write_m(RTL837X_REG_I2C_CTRL);
 	}
+
+	/*print_string("\r\n Addr: ");
+
+	upper = sfr_data[2] & 0x03;        // bits [1:0] -> reg bits [9:8]
+    lower = (sfr_data[3] & 0xF8) >> 3; // bits [7:3] -> reg bits [7:3]
+    addr = (upper << 5) | lower;       // combine upper + lower
+
+    write_char('0');
+    write_char('x');
+    write_char(hex[(addr >> 4) & 0x0F]);
+    write_char(hex[addr & 0x0F]);
+
+	print_string("\r\n");
+
+	print_sfr_data();
+
+	print_string("\r\n");*/
+
+	// Sets I2C addr
+
+	if(page == 0){
+
+		dev_addr = 0x50;
+
+		// bits [9:8] → upper 2 bits (byte 1, bits [1:0])
+		sfr_mask_data(1, 0x03, (dev_addr >> 5) & 0x03);
+
+		// bits [7:3] → lower 5 bits (byte 0, bits [7:3])
+		sfr_mask_data(0, 0xF8, (dev_addr << 3) & 0xF8);
+
+	}else{
+
+		dev_addr = 0x51;
+
+		// bits [9:8] → upper 2 bits (byte 1, bits [1:0])
+		sfr_mask_data(1, 0x03, (dev_addr >> 5) & 0x03);
+
+		// bits [7:3] → lower 5 bits (byte 0, bits [7:3])
+		sfr_mask_data(0, 0xF8, (dev_addr << 3) & 0xF8);
+	}
+
+	reg_write_m(RTL837X_REG_I2C_CTRL);
+
+
+	/*print_string("\r\n New addr: ");
+
+	upper = sfr_data[2] & 0x03;        // bits [1:0] -> reg bits [9:8]
+    lower = (sfr_data[3] & 0xF8) >> 3; // bits [7:3] -> reg bits [7:3]
+    addr = (upper << 5) | lower;       // combine upper + lower
+
+    write_char('0');
+    write_char('x');
+    write_char(hex[(addr >> 4) & 0x0F]);
+    write_char(hex[addr & 0x0F]);
+
+	print_string("\r\n");
+
+	print_sfr_data();
+
+	print_string("\r\n");*/
+
+	/*
+	
+	void sfr_mask_data(__xdata uint8_t n, __xdata uint8_t mask, __xdata uint8_t set)
+	{
+		uint8_t b = sfr_data[3-n];
+		b &= ~mask;
+		b |= set;
+		sfr_data[3-n] = b;
+	}
+	
+	*/
+
+	//reg_read_m(RTL837X_REG_I2C_CTRL);
+	//	sfr_mask_data(1, 0xff, 0x6e);
+	//	reg_write_m(RTL837X_REG_I2C_CTRL);
+
+
+	//uint8_t dev_addr; 
+	
+	//dev_addr = 0x50;
+    // Apply to I2C address register (low 7 bits)
+    // Existing REG_WRITE macro handles addr selection if needed
+    //REG_WRITE(RTL837X_REG_I2C_IN, 0, 0, 0, reg | (dev_addr << 1));
 
 	REG_WRITE(RTL837X_REG_I2C_IN, 0, 0, 0, reg);
 
@@ -745,6 +892,11 @@ uint8_t sfp_read_reg(uint8_t slot, uint8_t reg)
 
 	reg_read_m(RTL837X_REG_I2C_OUT);
 	return sfr_data[3];
+
+	print_byte(page);
+
+	return sfp_read_reg(slot, reg);
+
 }
 
 
@@ -888,7 +1040,6 @@ void sfp_print_info(uint8_t sfp)
 	print_string("\n");
 }
 
-
 void handle_sfp(void)
 {
 	reg_read_m(RTL837X_REG_GPIO_00_31_INPUT);
@@ -904,7 +1055,7 @@ void handle_sfp(void)
 		print_string("\n");
 		print_string("\n");
 		sfp_print_info(0);
-		sds_config(1, sfp_rate_to_sds_config(rate));
+		sds_config(0, sfp_rate_to_sds_config(rate));
 	}
 	if ((!(sfp_pins_last & 0x1)) && (sfr_data[0] & 0x40)) {
 		sfp_pins_last |= 0x01;
@@ -936,6 +1087,77 @@ void handle_sfp(void)
 		sds_config(0, sfp_rate_to_sds_config(rate));
 	}
 	if ((!(sfp_pins_last & 0x10)) && (sfr_data[1] & 0x04)) {
+		sfp_pins_last |= 0x10;
+		print_string("\n<MODULE 2 REMOVED>\n");
+	}
+}
+
+void handle_sfp2(void)
+{
+	//reg_read_m(RTL837X_REG_GPIO_00_31_INPUT);
+
+	reg_read_m(RTL837X_REG_GPIO_32_63_INPUT);
+	if ((sfp_pins_last & 0x01) && (!(sfr_data[3] & 0x20))) {
+		print_byte(sfr_data[3]);print_string("\n");
+		sfp_pins_last &= ~0x01;
+		print_string("\n<MODULE INSERTED>  ");
+		// Read Reg 11: Encoding, see SFF-8472 and SFF-8024
+		// Read Reg 12: Signalling rate (including overhead) in 100Mbit: 0xd: 1Gbit, 0x67:10Gbit
+		delay(250); // Delay, because some modules need time to wake up
+		uint8_t rate = sfp_read_reg(1, 12);
+		print_string("Rate: "); print_byte(rate);  // Normally 1, but 0 for DAC, can be ignored?
+		print_string("  Encoding: "); print_byte(sfp_read_reg(1, 11));
+		print_string("\n");
+		print_string("\n");
+		sfp_print_info(1);
+		sds_config(0, sfp_rate_to_sds_config(rate));
+	}
+
+	reg_read_m(RTL837X_REG_GPIO_32_63_INPUT);
+	if ((!(sfp_pins_last & 0x01)) && (sfr_data[3] & 0x20)) {
+		print_byte(sfr_data[3]);print_string("\n");
+		sfp_pins_last |= 0x01;
+		print_string("\n<MODULE REMOVED>\n");
+	}
+
+	/*reg_read_m(RTL837X_REG_GPIO_32_63_INPUT);
+	if ((sfp_pins_last & 0x2) && (!(sfr_data[3] & 0x20))) {
+		sfp_pins_last &= ~0x02;
+		print_string("\n<SFP2-RX OK>\n");
+	}
+	if ((!(sfp_pins_last & 0x2)) && (sfr_data[3] & 0x20)) {
+		sfp_pins_last |= 0x02;
+		print_string("\n<SFP2-RX LOS>\n");
+	}
+
+	if ((sfp_pins_last & 0x4) && (!(sfr_data[3] & 0x40))) {
+		sfp_pins_last &= ~0x04;
+		print_string("\n<SFP-RX OK>\n");
+	}
+	if ((!(sfp_pins_last & 0x4)) && (sfr_data[3] & 0x40)) {
+		sfp_pins_last |= 0x04;
+		print_string("\n<SFP-RX LOS>\n");
+	}*/
+
+	reg_read_m(RTL837X_REG_GPIO_32_63_INPUT);
+	if ((sfp_pins_last & 0x10) && (!(sfr_data[3] & 0x40))) {
+		print_byte(sfr_data[3]); print_string("\n");
+		sfp_pins_last &= ~0x10;
+		print_string("\n<MODULE 2 INSERTED>  ");
+		// Read Reg 11: Encoding, see SFF-8472 and SFF-8024
+		// Read Reg 12: Signalling rate (including overhead) in 100Mbit: 0xd: 1Gbit, 0x67:10Gbit
+		delay(250); // Delay, because some modules need time to wake up
+		uint8_t rate = sfp_read_reg(0, 12);
+		print_string("Rate: "); print_byte(rate);  // Normally 1, but 0 for DAC, can be ignored?
+		print_string("  Encoding: "); print_byte(sfp_read_reg(0, 11));
+		print_string("\n");
+		sfp_print_info(0);
+
+		sds_config(1, sfp_rate_to_sds_config(rate));
+	}
+	reg_read_m(RTL837X_REG_GPIO_32_63_INPUT);
+	if ((!(sfp_pins_last & 0x10)) && (sfr_data[3] & 0x40)) {
+		print_byte(sfr_data[3]); print_string("\n");
 		sfp_pins_last |= 0x10;
 		print_string("\n<MODULE 2 REMOVED>\n");
 	}
@@ -1004,7 +1226,8 @@ void idle(void)
 
 	// Check for changes with SFP modules
 
-	handle_sfp();
+	handle_sfp2();
+	//handle_sfp2();
 
 	/* Button pressed on KL-8xhm-x2:
 	reg_read(RTL837X_REG_GPIO_32_63_INPUT);

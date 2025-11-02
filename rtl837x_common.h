@@ -61,8 +61,11 @@ extern __xdata uint8_t uip_buf[UIP_CONF_BUFFER_SIZE+2];
 // Headers for calls in the common code area (HOME/BANK0)
 void print_string(__code char *p);
 void print_long(__xdata uint32_t a);
-void print_short(uint16_t a);
-void print_byte(uint8_t a);
+void print_short(__xdata uint16_t a);
+void print_byte(__xdata uint8_t a);
+
+void print_dec(__xdata uint32_t value);
+
 void print_sfr_data(void);
 void print_phy_data(void);
 void phy_write_mask(uint16_t phy_mask, uint8_t dev_id, uint16_t reg, uint16_t v);
@@ -77,7 +80,9 @@ void delay(uint16_t t);
 void sleep(uint16_t t);
 void write_char(char c);
 void print_reg(uint16_t reg);
-uint8_t sfp_read_reg(uint8_t slot, uint8_t reg);
+uint8_t sfp_read_reg(__xdata uint8_t slot,__xdata uint8_t reg);
+uint8_t sfp_read_reg_page(__xdata uint8_t slot, __xdata uint8_t page, __xdata uint8_t reg);
+
 void reg_bit_set(uint16_t reg_addr, char bit);
 void reg_bit_clear(uint16_t reg_addr, char bit);
 void sfr_set_zero(void);
