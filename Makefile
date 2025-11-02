@@ -1,3 +1,5 @@
+BUILD_TYPE ?= SPI
+
 BOOTLOADER_ADDRESS=0x100
 
 IMAGESIZE = 524288
@@ -58,7 +60,11 @@ $(BUILDDIR)rtlplayground.img: $(BUILDDIR)rtlplayground.ihx
 
 $(BUILDDIR)rtlplayground.bin: $(BUILDDIR)rtlplayground.img
 	if [ -e $@ ]; then rm $@; fi
+ifeq ($(BUILD_TYPE),OTA)
 	echo "0000000: 00 40" | xxd -r - $@
+else
+	echo "0000000: 00 00" | xxd -r - $@
+endif
 	cat $< >> $@
 	truncate --size=16K $@
 	dd if=$< skip=80 bs=1024 >>$@
